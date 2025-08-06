@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Smart Recycling Classifier</title>
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f0f4f8;
+      margin: 0;
+      padding: 0;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      color: #333;
+    }
+
+    .container {
+      background: #fff;
+      padding: 30px 40px;
+      border-radius: 12px;
+      box-shadow: 0 10px 20px rgba(0,0,0,0.1);
+      width: 400px;
+      text-align: center;
+    }
+
+    h1 {
+      margin-bottom: 25px;
+      font-weight: 700;
+      color: #2c7a7b;
+    }
+
+    input[type="text"] {
+      width: 100%;
+      padding: 12px 15px;
+      font-size: 16px;
+      border: 2px solid #2c7a7b;
+      border-radius: 8px;
+      outline-offset: 2px;
+      transition: border-color 0.3s ease;
+    }
+
+    input[type="text"]:focus {
+      border-color: #285e61;
+      outline: none;
+    }
+
+    .button-group {
+      display: flex;
+      gap: 10px;
+      margin-top: 15px;
+    }
+
+    button {
+      flex: 1;
+      background-color: #2c7a7b;
+      color: white;
+      border: none;
+      padding: 12px;
+      font-size: 16px;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+      font-weight: 600;
+    }
+
+    button:hover {
+      background-color: #285e61;
+    }
+
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      background: #e6fffa;
+      border: 2px solid #2c7a7b;
+      border-radius: 8px;
+      font-weight: 600;
+      white-space: pre-wrap;
+      min-height: 60px;
+      color: #999;
+      text-align: left;
+      font-size: 16px;
+    }
+
+    #history {
+      margin-top: 25px;
+      text-align: left;
+    }
+
+    .history-item {
+      position: relative;
+      background: #edf2f7;
+      padding: 12px 15px 12px 12px;
+      border-radius: 8px;
+      font-size: 14px;
+      margin-bottom: 12px;
+      color: #2d3748;
+      white-space: pre-wrap;
+    }
+
+    .delete-btn {
+      position: absolute;
+      top: 8px;
+      right: 10px;
+      background-color: #e53e3e;
+      border: none;
+      color: white;
+      font-size: 12px;
+      padding: 4px 8px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .delete-btn:hover {
+      background-color: #c53030;
+    }
+
+    @media (max-width: 480px) {
+      .container {
+        width: 90%;
+        padding: 20px;
+      }
+
+      input[type="text"], button {
+        font-size: 14px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Smart Recycling Classifier</h1>
+    <input id="item" type="text" placeholder="Enter item name" />
+    <div class="button-group">
+      <button onclick="sendToRelay()">Classify Item</button>
+      <button onclick="clearFields()">Clear</button>
+    </div>
+    <div id="result">Result will appear here...</div>
+    <div id="history"><h3>History</h3></div>
+  </div>
+
+  <script>
+    const webhookUrl = "https://hook.relay.app/api/v1/playbook/cme06o99k0mfl0oktdob8a6m8/trigger/Fl30nKZS1Tk4E3togrzyYA";
+
+    function clearFields() {
+      document.getElementById("item").value = "";
+      const resultDiv = document.getElementById("result");
+      resultDiv.style.color = "#999";
+      resultDiv.textContent = "Result will appear here...";
+    }
+
+    async function sendToRelay() {
+      const resultDiv = document.getElementById("result");
+      const itemInput = document.getElementById("item").value.trim();
+      const historyDiv = document.getElementById("history");
+
+      if (!itemInput) {
+        resultDiv.style.color = "red";
+        resultDiv.textContent = "⚠️ Please enter at least one item.";
+        return;
+      }
+
+      const items = itemInput.split(",").map(i => i.trim()).filter(i => i);
+      resultDiv.style.color = "#234e52";
+      resultDiv.textContent = "Processing...";
+
+      for (const item of items) {
+        try {
+          const response = await fetch(webhookUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ item_description: item }),
+          });
+
+          if (!response.ok) {
+            throw new Error("Network response was not ok");
+          }
+
+          const contentType = response.headers.get("content-type");
+          let classificationText = "No classification received.";
+
+          if (contentType && contentType.includes("application/json")) {
+            const data = await response.json();
+            const classificationData = data.classification || data["classification:"];
+
+            if (classificationData) {
+              if (typeof classificationData === "object") {
+                classificationText = Object.entries(classificationData)
+                  .map(([key, val]) => `${key}: ${val}`)
+                  .join('\n');
+              } else {
+                classificationText = classificationData;
+              }
+            }
+          } else {
+            classificationText = await response.text() || classificationText;
+          }
+
+          // Display in result
+          resultDiv.style.color = "#234e52";
+          resultDiv.textContent = classificationText;
+
+          // Save to history
+          const historyItem = document.createElement("div");
+          historyItem.classList.add("history-item");
+
+          const deleteBtn = document.createElement("button");
+          deleteBtn.classList.add("delete-btn");
+          deleteBtn.textContent = "×";
+          deleteBtn.onclick = () => historyItem.remove();
+
+          historyItem.innerHTML = `<strong>🧾 ${item}</strong><br>${classificationText}`;
+          historyItem.appendChild(deleteBtn);
+          historyDiv.appendChild(historyItem);
+
+        } catch (error) {
+          resultDiv.style.color = "red";
+          resultDiv.textContent = "❌ Error: " + error.message;
+        }
+      }
+    }
+  </script>
+</body>
+</html>
